@@ -6,24 +6,24 @@ module cpu
 (
     input FGI_in, FGO_in,
     input [interrupt_size-1:0] ext_input_data,
-    input clk, rst, start_pulse,  
+    input clk, rst, start_pulse,
     output [interrupt_size-1:0] ext_output_data
 );
     wire [word_size-1:0] AC_out, DR_out, IR_out;
     wire Load_AR, Load_PC, Load_DR, Load_AC, Load_OUTR, Load_IR, Load_TR;
     wire AC_15, AC_eq_0, DR_eq_0;
     wire Inc_AR, Inc_PC, Inc_DR, Inc_AC, Inc_SC;
-    wire clr_AR, clr_PC, clr_AC, clr_SC;                 //check with cpu_final (recheck)
+    wire clr_AR, clr_PC, clr_AC, clr_SC, clr_INPR, clr_OUTR;
     wire r;
     reg  Inc_SC_wire;
     wire mem_rd_EN, mem_wt_EN;  
     wire comp_E, Load_E, E_ff_out, clr_E;
     wire ADD, AND, LDA, STA, BUN, BSA, ISZ, INP, OUT, CMA, CIR, CIL;
-    wire Z, P;
+    wire W, Z, P;
     wire I, I_ctrl;
-    reg  S, E, R, FGI, FGO, IEN;     //Internal Flip-Flops
-    //wire [interrupt_size-1:0] ext_input_data;
-    //reg [interrupt_size-1:0] INPR_out, ext_output_data;    //IO registers
+    reg S, E, R, FGI, FGO, IEN;     //Internal Flip-Flops
+    wire clr_FGI, clr_FGO;
+    wire [interrupt_size-1:0] INPR_out;    //IO registers
     wire D0, D1, D2, D3, D4, D5, D6, D7;
     wire T0, T1, T2, T3, T4, T5, T6, T7;
     wire B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15;
@@ -54,7 +54,6 @@ module cpu
             else
                 FGO = FGO;
     end
-
     //Module Instantiations
     Datapath datapath(
         //Inputs
@@ -69,7 +68,7 @@ module cpu
         mem_rd_EN, mem_wt_EN,
         FGI, FGO,
         clr_INPR, clr_OUTR,
-        
+
         //Outputs
         IR_out, DR_out, AC_out,
         INPR_out, ext_output_data,
@@ -111,10 +110,10 @@ module cpu
     //Checking for 15th bit of AC an if AC = 0
     assign AC_15 = AC_out[15];
 
-    assign AC_eq_0 = (AC_out || 16'h0000) ? 0 : 1;           
+    assign AC_eq_0 = (AC_out || 16'h0000) ? 1 : 0;
 
     //Checking if Data Register = 0
-    assign DR_eq_0 = (DR_out || 16'h0000) ? 0 : 1;
+    assign DR_eq_0 = (DR_out || 16'h0000) ? 1 : 0;
     
     //AND-instruction logic
     assign AND = (D0 && T5);
@@ -135,7 +134,10 @@ module cpu
     assign BSA = (D5 && T5);
 
     //ISZ-instruction logic
-    assign ISZ = (D6 && T6);
+    assign ISZ = (D6 && T4);
+
+    //W generation
+    assign W = (D6 && T6);
 
     //Z generation 
     assign Z = (~D7 && I && T3);
@@ -176,7 +178,7 @@ module cpu
     //ION-instruction or Set IEN-bit logic
     always @(posedge clk)
     begin
-        IEN = ((P && B7)    ||
+        IEN = ((P && B7) ||
                (P && B6));
     end
 
@@ -202,7 +204,7 @@ module cpu
     //Inc PC generation
     assign Inc_PC =  ((~R && T1)        ||
                      (R && T2)          ||
-                     (ISZ && DR_eq_0)   ||  //if (DR = 0), then inc PC
+                     (W && DR_eq_0)     ||  //if (DR = 0), then inc PC
                      (rB4 && ~AC_15)    ||  //if (AC[15] = 0), then inc PC
                      (rB3 && AC_15)     ||  //if (AC[15] = 1), then inc PC
                      (rB2 && AC_eq_0)   ||  //if (AC = 0), then inc PC
@@ -214,8 +216,9 @@ module cpu
 
     //DR
     //Load DR generation
-    assign Load_DR = ((D0 || D1 || D2 || D6) && 
-                     (T4));
+    assign Load_DR = (((D0 || D1 || D2 || D6) && 
+                     (T4)) ||
+                     ISZ);
     //Inc DR generation
     assign Inc_DR = (D6 && T5);
 
@@ -255,7 +258,8 @@ module cpu
                      (BSA)             ||
                      (ISZ)             ||
                      (r)               ||
-                     (P));
+                     (P)               ||
+                     (W));
 
     //Memory read Enable Signal
     assign mem_rd_EN = ((T1)            ||
@@ -265,12 +269,13 @@ module cpu
     //Memory write Enable Signal
     assign mem_wt_EN = ((STA)           ||
                         (Inc_AC)        ||
-                        (ISZ));
+                        (W)             ||
+                        (D6 && T6));
 
     //BUS Selection Signals
     assign x1 = Load_PC;
     assign x2 = (Inc_AR || T0);
-    assign x3 = (LDA || ISZ);
+    assign x3 = (LDA || W);
     assign x4 = STA;
     assign x5 = T2;
     assign x6 = (T7);   //SIGNAL NOT DEFINED!!! (assumed x6 = T7)
@@ -285,9 +290,6 @@ module cpu
     assign ALU_Sel = {(rB11 || rB9 || rB7 || rB6),   //A2 a4 undefined!!! (assumed a4 = rB11)
                       (ADD  || LDA || rB7 || rB6),   //A1
                       (AND  || LDA || rB9 || rB6)};  //A0
-
-    
-
 endmodule
 
 //
@@ -315,7 +317,6 @@ module Datapath
     input mem_rd_EN, mem_wt_EN,
     input FGI, FGO,
     input clr_INPR, clr_OUTR,
-
 
     //External outputs
     output [word_size-1:0] IR_out, DR_out, AC_out,
@@ -380,7 +381,7 @@ module Datapath
         clr_INPR,
         clk,
         rst,
-        
+
         //outputs
         INPR_out
     );
@@ -404,14 +405,14 @@ module Datapath
     );  
 
     Register_OUTR OUTR(
-        //inputs        
+        //inputs
         AC_out,
         Load_OUTR,
         FGO,
         clr_OUTR,
         clk,
         rst,
-        
+
         //outputs
         ext_output_data
     );
@@ -656,18 +657,15 @@ module Register_INPR
     input FGI, clr, clk, rst,
     output reg [interrupt_size-1:0] INPR_out
 );
-
-    always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
         if (rst)
             INPR_out = 8'h00;
-        else begin
-            if (clr)
-                INPR_out = 8'h00;
-            else if (!FGI)
-                INPR_out = ext_input_data;
-            else
-                INPR_out = INPR_out;
-        end
+        else if (clr)
+            INPR_out = 8'h00;
+        else if (!FGI)
+            INPR_out = ext_input_data;
+        else
+            INPR_out = INPR_out;
     end
 endmodule
 
@@ -682,7 +680,6 @@ module Register_OUTR
     input Load_OUTR, FGO, clr_OUTR, clk, rst,
     output reg [interrupt_size-1:0] ext_output_data
 );
-
     always @(posedge clk or posedge rst) begin
         if (rst)
             ext_output_data <= 8'h00;
@@ -783,10 +780,10 @@ module ALU_16
         if(opcode == 3'b111) begin
             if(I_bit == 1'b1) begin
                 case(sel)
-                    INP:    begin
-                                if (FGI)
-                                    ALU_out[7:0] = INPR_out;
-                            end
+                    INP: begin
+                        if (FGI)
+                            ALU_out[7:0] = INPR_out;
+                    end
                     OUT:    ALU_out = AC_out;   //no op but OUTR = AC_out[7:0];
                     SKI:    ALU_out = AC_out;   //no op
                     SKO:    ALU_out = AC_out;   //no op
@@ -801,10 +798,10 @@ module ALU_16
                     CMA:    ALU_out = ~AC_out;
                     CME:    ALU_out = AC_out;   //no op
                     CIR: begin
-                        ALU_out = {E_ff_out, AC_out[15:1]};
+                        ALU_out = {AC_out[0], AC_out[15:1]};
                     end
                     CIL: begin
-                        ALU_out = {AC_out[14:0], E_ff_out};
+                        ALU_out = {AC_out[14:0], AC_out[15]};
                     end
                     INC:    ALU_out = AC_out;   //no op
                     SPA:    ALU_out = AC_out;   //no op
@@ -885,20 +882,10 @@ module E_in_generation
     input           E_ff_out, AC_15, rB6, AC_0, rB7, C_out, ADD,
 
     // Outputs
-    output reg      E_in
+    output          E_in
 );
 
-    always @(*)
-    begin
-        if (ADD) 
-            E_in = C_out;
-        else if (rB7) 
-            E_in = AC_0;
-        else if (rB6) 
-            E_in = AC_15;
-        else 
-            E_in = E_ff_out;
-    end
+    assign E_in = ADD ? C_out : (rB7 ? AC_0 : (rB6 ? AC_15 : E_ff_out));
 endmodule
 
 //E_logic (tested)
@@ -953,7 +940,6 @@ module ControlUnit
     output rB0, rB1, rB2, rB3, rB4, rB5, rB6, rB7, rB8, rB9, rB10, rB11
 );
 
-
     //Extracting bits from instruction
     assign B0  = IR_out[0];
     assign B1  = IR_out[1];
@@ -977,11 +963,10 @@ module ControlUnit
     wire [7:0] Decoder_out;
     wire [3:0] reg_wire;
     wire [15:0] T_out;
-    
+
+    //I logic
     always @(posedge clk)
     begin
-        mux_I_ctrl_out = 1'b0;
-        
         if (I_ctrl)
             mux_I_ctrl_out <= B15;
         else
@@ -1102,11 +1087,8 @@ module Decoder_3to8
     input                   Decoder_EN,
 
     // Outputs
-    output reg[7:0]            Decoder_out
+    output reg [7:0]            Decoder_out
 );
-
-    // Internal registers and wires
-
 
     always @(Decoder_sel or Decoder_EN) begin
     Decoder_out = 8'b0;  // Default to off
@@ -1135,9 +1117,6 @@ module Decoder_4to16
     // Outputs
     output reg [15:0]           Decoder_out
 );
-
-    // Internal registers and wires
-
 
     always @(Decoder_sel or Decoder_EN) begin
     Decoder_out = 16'b0;  // Default to off
