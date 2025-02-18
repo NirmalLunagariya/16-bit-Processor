@@ -7,7 +7,6 @@ A 16-bit processor implementation based on Morris Mano's principles with 25 inst
   - Instruction Set: 25 instructions
   - Memory: Directly addressable memory space
   - I/O Support: Integrated input/output capabilities
-  - Core clock: Supports upto 222MHz
   - Design Approach: Based on Morris Mano architectural principles
 
 ## Instruction Set
@@ -18,3 +17,8 @@ A 16-bit processor implementation based on Morris Mano's principles with 25 inst
   - Shift/Rotate operations
   - Control flow operations
   - I/O operations
+
+## Technical Specifications
+  - Implementation Platforn: Xilinx Vivado
+  - Units: Main 3 units(Datapath, Control, and CPU)
+  - Core clock: Supports upto 222MHz
