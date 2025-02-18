@@ -11,9 +11,9 @@ A 16-bit processor implementation based on Morris Mano's principles with 25 inst
 
 ## Instruction Set
   The processor implements the following instruction categories:
-    - Data Transfer instructions
-    - Arithmetic operations
-    - Logical operations
-    - Shift/Rotate operations
-    - Control flow operations
-    - I/O operations
+  - Data Transfer instructions
+  - Arithmetic operations
+  - Logical operations
+  - Shift/Rotate operations
+  - Control flow operations
+  - I/O operations
